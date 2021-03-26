@@ -50,7 +50,31 @@
 
 #include "my_utils.hpp"
 
-int main() {
+#include "my_cuHalfComplex.hpp"
 
+int main(int argc, char **argv) {
+   try {
+      cudaError_t cerror = cudaSuccess;
+      bool debug = false;
+      
+      // Empirically-determined maximum number
+      int num_vals = 1<<21;
 
+      ////////////////////////////////////////////////////////////////////
+      // ALLOCATE KERNEL DATA
+      ////////////////////////////////////////////////////////////////////
+      dout << "Initializing memory for input and output data...\n";
+      // Allocate pinned host memory that is also accessible by the device.
+      pinned_mapped_vector<cuHalfComplex> samples;
+      samples.reserve( num_vals );
+
+      gen_cuHalfComplexes( samples.data(), num_vals, 0.0, 1.0 );
+      print_cuHalfComplexes( samples.data(), num_vals, "", "\n", "\n" );
+
+      samples.clear();
+      return SUCCESS;
+   } catch( std::exception& ex ) {
+      std::cout << "ERROR: " << ex.what() << "\n"; 
+      return FAILURE;
+   }
 }
