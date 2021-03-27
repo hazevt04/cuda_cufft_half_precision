@@ -73,8 +73,10 @@ int main(int argc, char **argv) {
 
       samples.clear();
       return SUCCESS;
+
    } catch( std::exception& ex ) {
       std::cout << "ERROR: " << ex.what() << "\n"; 
       return FAILURE;
+
    }
 }
