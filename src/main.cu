@@ -54,12 +54,11 @@
 
 int main(int argc, char **argv) {
    try {
-      cudaError_t cerror = cudaSuccess;
       cufftResult cufft_status = CUFFT_SUCCESS;
       bool debug = false;
       
       // Empirically-determined maximum number
-      long long num_vals = 1<<21;
+      long long num_vals = 64;//1<<21;
 
       ////////////////////////////////////////////////////////////////////
       // ALLOCATE KERNEL DATA
@@ -72,8 +71,11 @@ int main(int argc, char **argv) {
       frequencies.reserve( num_vals );
       frequencies.resize( num_vals );
 
-      gen_cuHalfComplexes( samples.data(), num_vals, 0.0, 1.0 );
-      print_cuHalfComplexes( samples.data(), 10, "Samples", "\n", "\n" );
+      float frequency = 1e3;
+      float amplitude = 1.0;
+      //gen_cuHalfComplexes( samples.data(), num_vals, 0.0, 1.0 );
+      gen_cuHalfComplexes_sines( samples.data(), num_vals, amplitude, frequency );
+      print_cuHalfComplexes( samples.data(), 64, "Samples", "\n", "\n" );
 
       cufftHandle plan;
       size_t work_size = 0;
@@ -88,7 +90,7 @@ int main(int argc, char **argv) {
       try_cufft_func_throw(cufft_status,
          cufftXtExec(plan, samples.data(), frequencies.data(), CUFFT_FORWARD) );
 
-      print_cuHalfComplexes( frequencies.data(), 10, "Frequencies", "\n", "\n" );
+      print_cuHalfComplexes( frequencies.data(), 64, "Frequencies", "\n", "\n" );
 
       samples.clear();
       return SUCCESS;

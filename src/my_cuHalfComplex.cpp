@@ -1,5 +1,6 @@
 
 #include "my_cuHalfComplex.hpp"
+#include <cmath>
 
 void gen_cuHalfComplexes( cuHalfComplex* complexes, const int& num_complexes, const float& lower, const float& upper ) {
    std::random_device random_dev;
@@ -11,6 +12,12 @@ void gen_cuHalfComplexes( cuHalfComplex* complexes, const int& num_complexes, co
    } 
 }
 
+void gen_cuHalfComplexes_sines( cuHalfComplex* complexes, const int& num_complexes, const float& amplitude, const float& frequency ) {
+   for( int index = 0; index < num_complexes; ++index ) {
+      complexes[index].x = amplitude * sin( 2 * M_PI * frequency * (static_cast<float>(index)/static_cast<float>(num_complexes)) );
+      complexes[index].y = amplitude * sin( 2 * M_PI * frequency * (static_cast<float>(index)/static_cast<float>(num_complexes)) );
+   } 
+}
 
 void print_cuHalfComplexes(const cuHalfComplex* vals,
    const int& num_vals,

@@ -63,6 +63,8 @@ operator<<(std::basic_ostream<_CharT, _Traits>& __os, const cuHalfComplex& __c) 
 
 void gen_cuHalfComplexes( cuHalfComplex* complexes, const int& num_complexes, const float& lower, const float& upper );
 
+void gen_cuHalfComplexes_sines( cuHalfComplex* complexes, const int& num_complexes, const float& amplitude, const float& frequency );
+
 void print_cuHalfComplexes(const cuHalfComplex* vals,
    const int& num_vals,
    const char* prefix,
