@@ -90,8 +90,8 @@ inline const std::string get_cufft_status_msg(const cufftResult cufft_status) {
 }
 
 #define check_cufft_status_throw(cufft_status,loc) { \
-  if ( cerror != cudaSuccess ) { \
-    throw std::runtime_error{ std::string{ std::string{""#loc ": "} + std::string{get_cufft_status_msg(cufft_status)} + "(" + std::to_string(ccufft_status) + ")" } }; \
+  if ( cufft_status != CUFFT_SUCCESS ) { \
+    throw std::runtime_error{ std::string{ std::string{""#loc ": "} + std::string{get_cufft_status_msg(cufft_status)} + "(" + std::to_string(cufft_status) + ")" } }; \
   } \
 }
 

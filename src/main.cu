@@ -55,10 +55,11 @@
 int main(int argc, char **argv) {
    try {
       cudaError_t cerror = cudaSuccess;
+      cufftResult cufft_status = CUFFT_SUCCESS;
       bool debug = false;
       
       // Empirically-determined maximum number
-      int num_vals = 1<<21;
+      long long num_vals = 1<<21;
 
       ////////////////////////////////////////////////////////////////////
       // ALLOCATE KERNEL DATA
@@ -66,10 +67,28 @@ int main(int argc, char **argv) {
       dout << "Initializing memory for input and output data...\n";
       // Allocate pinned host memory that is also accessible by the device.
       pinned_mapped_vector<cuHalfComplex> samples;
+      pinned_mapped_vector<cuHalfComplex> frequencies;
       samples.reserve( num_vals );
+      frequencies.reserve( num_vals );
+      frequencies.resize( num_vals );
 
       gen_cuHalfComplexes( samples.data(), num_vals, 0.0, 1.0 );
-      print_cuHalfComplexes( samples.data(), num_vals, "", "\n", "\n" );
+      print_cuHalfComplexes( samples.data(), 10, "Samples", "\n", "\n" );
+
+      cufftHandle plan;
+      size_t work_size = 0;
+
+      try_cufft_func_throw(cufft_status, cufftCreate(&plan) );
+
+      try_cufft_func_throw(cufft_status, 
+         cufftXtMakePlanMany(plan, 1,  &num_vals, NULL, 1, 1, CUDA_C_16F, NULL, 1, 1, CUDA_C_16F, 1, &work_size, CUDA_C_16F) );
+
+      dout << "Work Size after cufftXtMakePlanMany() is " << work_size << "\n";
+
+      try_cufft_func_throw(cufft_status,
+         cufftXtExec(plan, samples.data(), frequencies.data(), CUFFT_FORWARD) );
+
+      print_cuHalfComplexes( frequencies.data(), 10, "Frequencies", "\n", "\n" );
 
       samples.clear();
       return SUCCESS;
