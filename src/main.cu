@@ -1,43 +1,5 @@
-#include <cufft.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <cufftXt.h>
-#include <cuda_fp16.h>
-#include <assert.h>
 
-/*typedef half2 ftype;*/
-/*long long sig_size = 1<<23;*/
-
-
-/*int main(){*/
-
-/*  ftype *h_idata = (ftype *)malloc(sig_size*sizeof(ftype));*/
-/*  ftype *d_idata;*/
-/*  ftype *d_odata;*/
-/*  cudaMalloc(&d_idata, sizeof(ftype)*sig_size);*/
-/*  cudaMalloc(&d_odata, sizeof(ftype)*sig_size);*/
-/*  cufftHandle plan;*/
-/*  cufftResult r;*/
-/*  r = cufftCreate(&plan);*/
-/*  assert(r == CUFFT_SUCCESS);*/
-/*  size_t ws = 0;*/
-/*  r = cufftXtMakePlanMany(plan, 1,  &sig_size, NULL, 1, 1, CUDA_C_16F, NULL, 1, 1, CUDA_C_16F, 1, &ws, CUDA_C_16F);*/
-/*  assert(r == CUFFT_SUCCESS);*/
-/*  r = cufftXtExec(plan, d_idata, d_odata, CUFFT_FORWARD); // warm-up*/
-/*  assert(r == CUFFT_SUCCESS);*/
-/*  cudaEvent_t start, stop;*/
-/*  cudaEventCreate(&start); cudaEventCreate(&stop);*/
-/*  cudaEventRecord(start);*/
-/*  r = cufftXtExec(plan, d_idata, d_odata, CUFFT_FORWARD);*/
-/*  assert(r == CUFFT_SUCCESS);*/
-/*  cudaEventRecord(stop);*/
-/*  cudaEventSynchronize(stop);*/
-/*  float et;*/
-/*  cudaEventElapsedTime(&et, start, stop);*/
-/*  printf("forward FFT time for %lld samples: %fms\n", sig_size, et);*/
-/*  return 0;*/
-/*}*/
-
+#include "my_cuHalfComplex.hpp"
 
 #include "pinned_mapped_vector_utils.hpp"
 #include "pinned_mapped_allocator.hpp"
@@ -50,15 +12,47 @@
 
 #include "my_utils.hpp"
 
-#include "my_cuHalfComplex.hpp"
+#include <cufftXt.h>
+#include <cuda_fp16.h>
+#include <assert.h>
+#include <algorithm>
 
 int main(int argc, char **argv) {
    try {
       cufftResult cufft_status = CUFFT_SUCCESS;
       bool debug = false;
       
-      // Empirically-determined maximum number
-      long long num_vals = 64;//1<<21;
+      // We want the FFT to only have one spike, so we have to be careful about 
+      // the sine wave frequency. The FFT size (num_vals) must be an integer 
+      // multiple of the period of the sine wave
+      // Per the answer from StackOverflow:
+      // https://stackoverflow.com/a/36293992/11197687
+      float frequency = 1024;
+      float period = 1/frequency;
+      
+      float duration = period;
+      
+      float sample_rate = 16384 * frequency;
+
+      // Must be long long due to expected type for cuFFTXt
+      long long num_vals = duration * sample_rate;
+      
+      // cuFFTXt FFT Size (=num_vals) must be a power of 2 when using fp16
+      assert( is_power_of_two( static_cast<int>(num_vals) ) );
+
+      float amplitude = 1.0;
+
+      std::cout << "Sine Wave Frequency is " << frequency << " Hz\n";
+      std::cout << "Sine Wave Period is " << period << " seconds\n";
+      std::cout << "\n"; 
+
+      std::cout << "Duration is " << duration << " seconds\n";
+      std::cout << "Sample Rate is " << sample_rate << " sps\n";
+      std::cout << "Number of Values is " << num_vals << "\n"; 
+      std::cout << "\n"; 
+
+      std::cout << "Sine Wave Amplitude is " << amplitude << "\n";
+      std::cout << "\n"; 
 
       ////////////////////////////////////////////////////////////////////
       // ALLOCATE KERNEL DATA
@@ -66,16 +60,18 @@ int main(int argc, char **argv) {
       dout << "Initializing memory for input and output data...\n";
       // Allocate pinned host memory that is also accessible by the device.
       pinned_mapped_vector<cuHalfComplex> samples;
-      pinned_mapped_vector<cuHalfComplex> frequencies;
+      pinned_mapped_vector<cuHalfComplex> frequency_bins;
       samples.reserve( num_vals );
-      frequencies.reserve( num_vals );
-      frequencies.resize( num_vals );
+      frequency_bins.reserve( num_vals );
+      frequency_bins.resize( num_vals );
 
-      float frequency = 1e3;
-      float amplitude = 1.0;
       //gen_cuHalfComplexes( samples.data(), num_vals, 0.0, 1.0 );
-      gen_cuHalfComplexes_sines( samples.data(), num_vals, amplitude, frequency );
-      print_cuHalfComplexes( samples.data(), 64, "Samples", "\n", "\n" );
+      gen_cuHalfComplexes_sines( samples.data(), num_vals, amplitude, frequency, sample_rate );
+      
+      print_cuHalfComplexes( samples.data(), 0, 2, "Sample", "\n", "\n" );
+      print_cuHalfComplexes( samples.data(), ((num_vals/4) - 1), 3, "Sample", "\n", "\n" );
+      print_cuHalfComplexes( samples.data(), ((3 * (num_vals/4)) - 1), 3, "Sample", "\n", "\n" );
+      print_cuHalfComplexes( samples.data(), (num_vals - 3), 3, "Sample", "\n", "\n" );
 
       cufftHandle plan;
       size_t work_size = 0;
@@ -86,11 +82,27 @@ int main(int argc, char **argv) {
          cufftXtMakePlanMany(plan, 1,  &num_vals, NULL, 1, 1, CUDA_C_16F, NULL, 1, 1, CUDA_C_16F, 1, &work_size, CUDA_C_16F) );
 
       dout << "Work Size after cufftXtMakePlanMany() is " << work_size << "\n";
+      dout << "\n";
 
       try_cufft_func_throw(cufft_status,
-         cufftXtExec(plan, samples.data(), frequencies.data(), CUFFT_FORWARD) );
+         cufftXtExec(plan, samples.data(), frequency_bins.data(), CUFFT_FORWARD) );
 
-      print_cuHalfComplexes( frequencies.data(), 64, "Frequencies", "\n", "\n" );
+      print_cuHalfComplexes( frequency_bins.data(), 0, 2, "Frequency Bin", "\n", "\n" );
+      print_cuHalfComplexes( frequency_bins.data(), ((num_vals/4) - 1), 3, "Frequency Bin", "\n", "\n" );
+      print_cuHalfComplexes( frequency_bins.data(), ((3 * (num_vals/4)) - 1), 3, "Frequency Bin", "\n", "\n" );
+      print_cuHalfComplexes( frequency_bins.data(), (num_vals - 3), 3, "Frequency Bin", "\n", "\n" );
+
+      auto non_zero_freq_it = std::find_if( frequency_bins.begin(), frequency_bins.end(), 
+         [](const cuHalfComplex& freq) {
+            return (  are_cuHalfComplexes_not_equal( freq, make_cuHalfComplex(0.0f, 0.0f) )  ); 
+         });
+
+      if ( non_zero_freq_it != frequency_bins.end() ) {
+         std::cout << "Frequency Bin " << std::distance( frequency_bins.begin(), non_zero_freq_it ) << " is "
+            << *non_zero_freq_it << "\n"; 
+      } else {
+         std::cout << "All frequency bins are ZERO?\n"; 
+      }
 
       samples.clear();
       return SUCCESS;
