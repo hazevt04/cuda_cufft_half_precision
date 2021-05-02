@@ -42,7 +42,7 @@ set(SRCS
    "src/my_file_io_funcs.cpp"
    "src/my_cuda_utils.cpp"
    "src/my_cuHalfComplex.cpp"
-   "src/pinned_mapped_vector_utils.cpp"
+   "src/pinned_vector_utils.cpp"
    "src/main.cu"
    )
 

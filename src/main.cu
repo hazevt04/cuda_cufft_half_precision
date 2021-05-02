@@ -1,8 +1,10 @@
 
 #include "my_cuHalfComplex.hpp"
 
-#include "pinned_mapped_vector_utils.hpp"
-#include "pinned_mapped_allocator.hpp"
+#include "device_allocator.hpp"
+
+#include "pinned_vector_utils.hpp"
+#include "pinned_allocator.hpp"
 
 #include "my_cufft_utils.hpp"
 #include "my_cuda_utils.hpp"
@@ -10,6 +12,7 @@
 #include "my_generators.hpp"
 #include "my_printers.hpp"
 
+#include "my_cuda_utils.hpp"
 #include "my_utils.hpp"
 
 #include <cufftXt.h>
@@ -20,6 +23,7 @@
 int main(int argc, char **argv) {
    try {
       cufftResult cufft_status = CUFFT_SUCCESS;
+      cudaError_t cerror = cudaSuccess;
       bool debug = false;
       
       // We want the FFT to only have one spike, so we have to be careful about 
@@ -58,11 +62,18 @@ int main(int argc, char **argv) {
       // ALLOCATE KERNEL DATA
       ////////////////////////////////////////////////////////////////////
       dout << "Initializing memory for input and output data...\n";
-      // Allocate pinned host memory that is also accessible by the device.
-      pinned_mapped_vector<cuHalfComplex> samples;
-      pinned_mapped_vector<cuHalfComplex> frequency_bins;
+      // Allocate pinned_mapped host memory that is also accessible by the device.
+      pinned_vector<cuHalfComplex> samples;
+      pinned_vector<cuHalfComplex> frequency_bins;
+      device_vector<cuHalfComplex> d_samples;
+      device_vector<cuHalfComplex> d_frequency_bins;
+
       samples.reserve( num_vals );
       frequency_bins.reserve( num_vals );
+
+      d_samples.reserve( num_vals );
+      d_frequency_bins.reserve( num_vals );
+      
       frequency_bins.resize( num_vals );
 
       //gen_cuHalfComplexes( samples.data(), num_vals, 0.0, 1.0 );
@@ -84,10 +95,21 @@ int main(int argc, char **argv) {
       dout << "Work Size after cufftXtMakePlanMany() is " << work_size << "\n";
       dout << "\n";
 
+      size_t num_val_bytes = num_vals * sizeof( cuHalfComplex );
+      try_cuda_func( cerror, cudaMemcpyAsync( d_samples.data(), samples.data(), num_val_bytes,
+               cudaMemcpyHostToDevice, nullptr ) );
+
       try_cufft_func_throw(cufft_status,
-         cufftXtExec(plan, samples.data(), frequency_bins.data(), CUFFT_FORWARD) );
+         //cufftXtExec(plan, samples.data(), frequency_bins.data(), CUFFT_FORWARD) );
+         cufftXtExec( plan, d_samples.data(), d_frequency_bins.data(), CUFFT_FORWARD ) );
+      
+      try_cuda_func( cerror, cudaMemcpyAsync( frequency_bins.data(), d_frequency_bins.data(), num_val_bytes,
+               cudaMemcpyDeviceToHost, nullptr ) );
+
+      try_cuda_func( cerror, cudaDeviceSynchronize() );
 
       print_cuHalfComplexes( frequency_bins.data(), 0, 2, "Frequency Bin", "\n", "\n" );
+      print_cuHalfComplexes( frequency_bins.data(), 1024, 1, "Frequency Bin", "\n", "\n" );
       print_cuHalfComplexes( frequency_bins.data(), ((num_vals/4) - 1), 3, "Frequency Bin", "\n", "\n" );
       print_cuHalfComplexes( frequency_bins.data(), ((3 * (num_vals/4)) - 1), 3, "Frequency Bin", "\n", "\n" );
       print_cuHalfComplexes( frequency_bins.data(), (num_vals - 3), 3, "Frequency Bin", "\n", "\n" );
